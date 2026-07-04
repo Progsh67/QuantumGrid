@@ -52,7 +52,7 @@
             height: 105px;
             border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
             cursor: pointer;
-            animation: floatUp 7s linear forwards; /* Made it a bit slower so it's easier to catch */
+            animation: floatUp 7s linear forwards; 
             display: flex;
             justify-content: center;
             align-items: center;
@@ -82,10 +82,9 @@
             100% { transform: scale(0); opacity: 0; }
         }
 
-        /* NEW: Giant, unmissable message box right in the center of the screen */
         #message-board {
             position: absolute;
-            top: 50%;
+            top: 30%;
             left: 50%;
             transform: translate(-50%, -50%) scale(0);
             background: #ffffff;
@@ -105,10 +104,80 @@
             transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
-        /* Class to trigger the pop-up appearance */
         #message-board.show {
             transform: translate(-50%, -50%) scale(1);
             opacity: 1;
+        }
+
+        /* NEW: Game Over Screen Screen Layout */
+        #game-over-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(30, 41, 59, 0.85); /* Dim background */
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        #game-over-screen.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 40px;
+            border-radius: 40px;
+            border: 8px solid #3b82f6;
+            text-align: center;
+            max-width: 400px;
+            width: 80%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transform: scale(0.7);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #game-over-screen.show .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-content h2 {
+            font-size: 3rem;
+            margin: 0 0 10px 0;
+            color: #ef4444;
+        }
+
+        .modal-content p {
+            font-size: 1.8rem;
+            margin: 10px 0 30px 0;
+            color: #1e293b;
+        }
+
+        .restart-btn {
+            background: #4ade80;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 8px 0px #22c55e;
+            font-family: inherit;
+            transition: all 0.1s ease;
+        }
+
+        .restart-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 4px 0px #22c55e;
         }
     </style>
 </head>
@@ -120,14 +189,27 @@
 
     <div id="message-board">Hello Eshin!</div>
 
+    <div id="game-over-screen" id="gameOverScreen">
+        <div class="modal-content">
+            <h2>Game Over! 😮</h2>
+            <p>Total Balloons Popped:<br><strong style="color: #ec4899; font-size: 3.5rem;" id="final-score">0</strong></p>
+            <button class="restart-btn" onclick="resetGame()">Play Again 🔄</button>
+        </div>
+    </div>
+
     <div id="game-container"></div>
 
     <script>
         const container = document.getElementById('game-container');
         const scoreDisplay = document.getElementById('score');
         const messageBoard = document.getElementById('message-board');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreDisplay = document.getElementById('final-score');
+        
         let score = 0;
         let messageTimer = null;
+        let spawnInterval = null;
+        let isGameOver = false;
 
         const colors = ['#ff0055', '#00ccff', '#9900ff', '#ffcc00', '#ff6600', '#33cc33'];
 
@@ -156,31 +238,61 @@
             osc.stop(ctx.currentTime + 0.08);
         }
 
+        // Sound effect for missing a balloon
+        function playGameOverSound() {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(220, ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(110, ctx.currentTime + 0.5);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.5);
+        }
+
         function speakPhrase(text) {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel(); 
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 0.85; // Slightly slower and clearer for a toddler
+                utterance.rate = 0.85; 
                 utterance.pitch = 1.2; 
                 window.speechSynthesis.speak(utterance);
             }
         }
 
-        // Displays the phrase proudly in the center box
         function displayMessage(text) {
-            // Clear any old timer if he pops another balloon quickly
             clearTimeout(messageTimer);
-            
             messageBoard.textContent = text;
             messageBoard.classList.add('show');
-            
-            // Hide the box automatically after 2 seconds
             messageTimer = setTimeout(() => {
                 messageBoard.classList.remove('show');
             }, 2000);
         }
 
+        function triggerGameOver() {
+            if (isGameOver) return;
+            isGameOver = true;
+            
+            clearInterval(spawnInterval); // Stop making new balloons
+            playGameOverSound();
+            speakPhrase("Game over! Great job Eshin!");
+
+            // Freeze and remove all current balloons on screen
+            const activeBalloons = document.querySelectorAll('.balloon');
+            activeBalloons.forEach(b => b.remove());
+
+            // Display Results
+            finalScoreDisplay.textContent = score;
+            gameOverScreen.classList.add('show');
+        }
+
         function createBalloon() {
+            if (isGameOver) return;
+
             const balloon = document.createElement('div');
             balloon.classList.add('balloon');
 
@@ -196,6 +308,8 @@
 
             const popEvent = (e) => {
                 e.preventDefault();
+                if (isGameOver) return;
+                
                 if (!balloon.classList.contains('pop')) {
                     balloon.classList.add('pop');
                     playPopSound();
@@ -204,8 +318,6 @@
                     scoreDisplay.textContent = score;
 
                     const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
-                    
-                    // Fire off the screen pop-up and the voice speaking
                     displayMessage(randomPhrase);
                     speakPhrase(randomPhrase);
                     
@@ -215,18 +327,38 @@
 
             balloon.addEventListener('mousedown', popEvent);
             balloon.addEventListener('touchstart', popEvent);
-            balloon.addEventListener('animationend', () => { balloon.remove(); });
+
+            // CRITICAL: If animation ends naturally, it means Eshin missed it!
+            balloon.addEventListener('animationend', () => {
+                balloon.remove();
+                triggerGameOver();
+            });
 
             container.appendChild(balloon);
         }
 
-        // Spawn a new balloon every 1.6 seconds so it's not overwhelming
-        setInterval(createBalloon, 1600);
+        function startGame() {
+            score = 0;
+            isGameOver = false;
+            scoreDisplay.textContent = "0";
+            gameOverScreen.classList.remove('show');
+            messageBoard.classList.remove('show');
 
-        // Start with a few balloons on screen
-        for(let i=0; i<3; i++) {
-            setTimeout(createBalloon, i * 600);
+            // Setup spawning
+            spawnInterval = setInterval(createBalloon, 1600);
+
+            // Create initial ones
+            for(let i=0; i<3; i++) {
+                setTimeout(createBalloon, i * 600);
+            }
         }
+
+        function resetGame() {
+            startGame();
+        }
+
+        // Boot up game on load
+        startGame();
     </script>
 </body>
 </html>
