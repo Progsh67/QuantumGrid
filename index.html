@@ -48,11 +48,11 @@
 
         .balloon {
             position: absolute;
-            width: 85px;
-            height: 100px;
+            width: 90px;
+            height: 105px;
             border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
             cursor: pointer;
-            animation: floatUp 6s linear forwards; /* Slightly slower for easier tapping */
+            animation: floatUp 7s linear forwards; /* Made it a bit slower so it's easier to catch */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -62,19 +62,17 @@
         .balloon::after {
             content: "▲";
             color: inherit;
-            font-size: 12px;
+            font-size: 14px;
             position: absolute;
             bottom: -8px;
             filter: brightness(0.9);
         }
 
-        /* Floating animation */
         @keyframes floatUp {
             0% { transform: translateY(105vh); }
             100% { transform: translateY(-15vh); }
         }
 
-        /* Pop explosion effect */
         .pop {
             animation: burst 0.15s ease-out forwards !important;
         }
@@ -84,29 +82,33 @@
             100% { transform: scale(0); opacity: 0; }
         }
 
-        /* Floating text message animation */
-        .message-text {
+        /* NEW: Giant, unmissable message box right in the center of the screen */
+        #message-board {
             position: absolute;
-            font-size: 1.5rem;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            background: #ffffff;
+            border: 6px solid #ff477e;
+            border-radius: 30px;
+            padding: 20px 40px;
+            font-size: 2.2rem;
             font-weight: bold;
             color: #1e3a8a;
-            background: white;
-            padding: 8px 15px;
-            border-radius: 20px;
-            border: 3px solid #f43f5e;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+            z-index: 100;
             pointer-events: none;
-            white-space: nowrap;
-            z-index: 5;
-            animation: floatText 2.5s ease-out forwards;
+            width: 80%;
+            max-width: 500px;
+            opacity: 0;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
-        @keyframes floatText {
-            0% { transform: scale(0.5); opacity: 1; }
-            20% { transform: scale(1.1); }
-            40% { transform: scale(1); }
-            80% { opacity: 1; }
-            100% { transform: translateY(-80px); opacity: 0; }
+        /* Class to trigger the pop-up appearance */
+        #message-board.show {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
         }
     </style>
 </head>
@@ -116,16 +118,19 @@
         <h1>🎈 Eshin's Score: <span id="score">0</span> 🎈</h1>
     </div>
 
+    <div id="message-board">Hello Eshin!</div>
+
     <div id="game-container"></div>
 
     <script>
         const container = document.getElementById('game-container');
         const scoreDisplay = document.getElementById('score');
+        const messageBoard = document.getElementById('message-board');
         let score = 0;
+        let messageTimer = null;
 
         const colors = ['#ff0055', '#00ccff', '#9900ff', '#ffcc00', '#ff6600', '#33cc33'];
 
-        // Your custom personalized phrases
         const phrases = [
             "Eshin, you are good!",
             "Eshin, you are a good boy!",
@@ -136,7 +141,6 @@
             "Wow! Super Eshin!"
         ];
 
-        // Sound generator for the balloon pop noise
         function playPopSound() {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const osc = ctx.createOscillator();
@@ -152,32 +156,28 @@
             osc.stop(ctx.currentTime + 0.08);
         }
 
-        // Uses the browser's built-in voice assistant to talk out loud to Eshin
         function speakPhrase(text) {
             if ('speechSynthesis' in window) {
-                // Stop any voice currently speaking so they don't overlap
                 window.speechSynthesis.cancel(); 
-                
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 0.9; // Speak slightly slower so a 3-year-old can understand
-                utterance.pitch = 1.2; // Slightly higher pitch to sound friendly
+                utterance.rate = 0.85; // Slightly slower and clearer for a toddler
+                utterance.pitch = 1.2; 
                 window.speechSynthesis.speak(utterance);
             }
         }
 
-        function createFloatingText(text, x, y) {
-            const textElement = document.createElement('div');
-            textElement.classList.add('message-text');
-            textElement.textContent = text;
+        // Displays the phrase proudly in the center box
+        function displayMessage(text) {
+            // Clear any old timer if he pops another balloon quickly
+            clearTimeout(messageTimer);
             
-            // Center the text box over where the balloon was clicked
-            textElement.style.left = `${x - 60}px`;
-            textElement.style.top = `${y}px`;
+            messageBoard.textContent = text;
+            messageBoard.classList.add('show');
             
-            container.appendChild(textElement);
-            
-            // Remove text after animation completes
-            setTimeout(() => { textElement.remove(); }, 2500);
+            // Hide the box automatically after 2 seconds
+            messageTimer = setTimeout(() => {
+                messageBoard.classList.remove('show');
+            }, 2000);
         }
 
         function createBalloon() {
@@ -185,13 +185,12 @@
             balloon.classList.add('balloon');
 
             const randomColor = colors[Math.floor(Math.random() * colors.length)];
-            const randomX = Math.random() * (window.innerWidth - 100);
+            const randomX = Math.random() * (window.innerWidth - 110);
             
             balloon.style.backgroundColor = randomColor;
             balloon.style.color = randomColor;
             balloon.style.left = `${randomX}px`;
 
-            // Random float speed (6 to 9 seconds) so it's calm and fun
             const duration = 6 + Math.random() * 3;
             balloon.style.animationDuration = `${duration}s`;
 
@@ -204,15 +203,10 @@
                     score++;
                     scoreDisplay.textContent = score;
 
-                    // Pick a random phrase from your list
                     const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
                     
-                    // Get click position to show text right under their finger
-                    const clickX = e.clientX || (e.touches && e.touches[0].clientX) || randomX + 40;
-                    const clickY = e.clientY || (e.touches && e.touches[0].clientY) || 300;
-                    
-                    // Trigger the visual text and the robot voice
-                    createFloatingText(randomPhrase, clickX, clickY);
+                    // Fire off the screen pop-up and the voice speaking
+                    displayMessage(randomPhrase);
                     speakPhrase(randomPhrase);
                     
                     setTimeout(() => { balloon.remove(); }, 150);
@@ -221,18 +215,17 @@
 
             balloon.addEventListener('mousedown', popEvent);
             balloon.addEventListener('touchstart', popEvent);
-
             balloon.addEventListener('animationend', () => { balloon.remove(); });
 
             container.appendChild(balloon);
         }
 
-        // Spawn a new balloon every 1.5 seconds
-        setInterval(createBalloon, 1500);
+        // Spawn a new balloon every 1.6 seconds so it's not overwhelming
+        setInterval(createBalloon, 1600);
 
-        // Initial launch of balloons
+        // Start with a few balloons on screen
         for(let i=0; i<3; i++) {
-            setTimeout(createBalloon, i * 500);
+            setTimeout(createBalloon, i * 600);
         }
     </script>
 </body>
